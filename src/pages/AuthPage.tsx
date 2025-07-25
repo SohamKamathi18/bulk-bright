@@ -31,17 +31,20 @@ export default function AuthPage() {
 
     setIsLoading(true);
     try {
-      // Simulate OTP sending
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setOtpSent(true);
       toast({
-        title: "OTP Sent!",
-        description: `Verification code sent to ${phone}`,
+        title: "Welcome to VendorLink!",
+        description: `Logged in successfully as ${selectedRole}`,
       });
+      // Navigate to appropriate dashboard directly
+      if (selectedRole === 'vendor') {
+        navigate('/vendor/dashboard');
+      } else {
+        navigate('/supplier/dashboard');
+      }
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to send OTP. Please try again.",
+        description: "Failed to login. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -140,70 +143,31 @@ export default function AuthPage() {
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {!otpSent ? (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="Enter your phone number"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      className="pl-10"
-                      maxLength={10}
-                    />
-                  </div>
-                </div>
-
-                <Button 
-                  onClick={handleSendOTP} 
-                  className="w-full"
-                  disabled={isLoading}
-                >
-                  {isLoading ? "Sending OTP..." : "Send OTP"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="otp">Verification Code</Label>
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="phone">Phone Number</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                   <Input
-                    id="otp"
-                    type="text"
-                    placeholder="Enter 6-digit OTP"
-                    value={otp}
-                    onChange={(e) => setOtp(e.target.value)}
-                    maxLength={6}
-                    className="text-center text-lg"
+                    id="phone"
+                    type="tel"
+                    placeholder="Enter your phone number"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="pl-10"
+                    maxLength={10}
                   />
-                  <p className="text-sm text-muted-foreground text-center">
-                    Code sent to {phone}
-                  </p>
                 </div>
+              </div>
 
-                <div className="space-y-2">
-                  <Button 
-                    onClick={handleVerifyOTP} 
-                    className="w-full"
-                    disabled={isLoading}
-                  >
-                    {isLoading ? "Verifying..." : "Verify & Login"}
-                  </Button>
-                  
-                  <Button 
-                    variant="outline" 
-                    onClick={resetForm} 
-                    className="w-full"
-                  >
-                    Change Phone Number
-                  </Button>
-                </div>
-              </>
-            )}
-
+              <Button 
+                onClick={handleSendOTP} 
+                className="w-full"
+                disabled={isLoading}
+              >
+                {isLoading ? "Logging in..." : "Login"}
+              </Button>
+            </>
             <div className="text-center text-sm text-muted-foreground">
               By continuing, you agree to our Terms & Privacy Policy
             </div>
