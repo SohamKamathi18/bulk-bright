@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/ui/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,17 +7,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Plus, 
-  Trash2, 
-  Users, 
-  Clock, 
-  MapPin, 
-  TrendingUp,
-  ShoppingCart,
-  AlertCircle
-} from "lucide-react";
+import { Plus, Trash2, Users, Clock, MapPin, TrendingUp, ShoppingCart, AlertCircle } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { db, auth } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface RawMaterial {
   id: string;
@@ -29,45 +23,45 @@ interface RawMaterial {
 }
 
 export default function VendorNeeds() {
-  const [materials, setMaterials] = useState<RawMaterial[]>([
-    { id: '1', name: 'Tomatoes', quantity: 5, unit: 'kg', urgency: 'high' },
-    { id: '2', name: 'Onions', quantity: 3, unit: 'kg', urgency: 'medium' },
-  ]);
-
-  const [newMaterial, setNewMaterial] = useState<Partial<RawMaterial>>({
-    name: '',
-    quantity: 0,
-    unit: 'kg',
-    urgency: 'medium'
-  });
-
+  const [materials, setMaterials] = useState<RawMaterial[]>([]);
+  const [newMaterial, setNewMaterial] = useState<Partial<RawMaterial>>({ name: '', quantity: 0, unit: 'kg', urgency: 'medium' });
   const [isSearchingClusters, setIsSearchingClusters] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const clusterMatches = [
-    {
-      item: 'Tomatoes',
-      vendors: 4,
-      totalQuantity: 18,
-      estimatedSavings: 26,
-      deliveryTime: '2-3 hours',
-      location: 'Within 2km radius'
-    },
-    {
-      item: 'Onions', 
-      vendors: 6,
-      totalQuantity: 25,
-      estimatedSavings: 31,
-      deliveryTime: '1-2 hours',
-      location: 'Within 1.5km radius'
-    }
-  ];
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+        setMaterials([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    setLoading(true);
+    const docRef = doc(db, "vendor_needs", userId);
+    const unsub = onSnapshot(docRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setMaterials(docSnap.data().materials || []);
+      } else {
+        setMaterials([]);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId]);
 
   const commonItems = [
     'Tomatoes', 'Onions', 'Potatoes', 'Carrots', 'Cabbage', 
     'Cooking Oil', 'Rice', 'Wheat Flour', 'Sugar', 'Salt'
   ];
 
-  const addMaterial = () => {
+  const addMaterial = async () => {
     if (!newMaterial.name || !newMaterial.quantity) {
       toast({
         title: "Missing Information",
@@ -76,7 +70,10 @@ export default function VendorNeeds() {
       });
       return;
     }
-
+    if (!userId) {
+      toast({ title: "Not logged in", description: "Please log in first.", variant: "destructive" });
+      return;
+    }
     const material: RawMaterial = {
       id: Date.now().toString(),
       name: newMaterial.name,
@@ -84,31 +81,36 @@ export default function VendorNeeds() {
       unit: newMaterial.unit || 'kg',
       urgency: newMaterial.urgency || 'medium'
     };
-
-    setMaterials([...materials, material]);
-    setNewMaterial({ name: '', quantity: 0, unit: 'kg', urgency: 'medium' });
-    
-    toast({
-      title: "Item Added",
-      description: `${material.name} added to your daily needs`,
-    });
+    try {
+      const docRef = doc(db, "vendor_needs", userId);
+      await setDoc(docRef, { materials: arrayUnion(material) }, { merge: true });
+      setNewMaterial({ name: '', quantity: 0, unit: 'kg', urgency: 'medium' });
+      toast({ title: "Item Added", description: `${material.name} added to your daily needs` });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to add item.", variant: "destructive" });
+    }
   };
 
-  const removeMaterial = (id: string) => {
-    setMaterials(materials.filter(m => m.id !== id));
+  const removeMaterial = async (id: string) => {
+    if (!userId) return;
+    try {
+      const docRef = doc(db, "vendor_needs", userId);
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const updated = (docSnap.data().materials || []).filter((m: RawMaterial) => m.id !== id);
+        await updateDoc(docRef, { materials: updated });
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message || "Failed to remove item.", variant: "destructive" });
+    }
   };
 
   const searchForClusters = async () => {
     setIsSearchingClusters(true);
-    
-    // Simulate API call
+    // Placeholder for real cluster search logic
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
     setIsSearchingClusters(false);
-    toast({
-      title: "Clusters Found!",
-      description: `Found ${clusterMatches.length} active clusters matching your needs`,
-    });
+    toast({ title: "Clusters Found!", description: `Cluster search is not yet implemented.` });
   };
 
   const getUrgencyColor = (urgency: string) => {
@@ -123,15 +125,11 @@ export default function VendorNeeds() {
   return (
     <div className="min-h-screen bg-background">
       <Navigation userRole="vendor" onLogout={() => window.location.href = '/'} />
-      
       <main className="max-w-4xl mx-auto p-4 space-y-6">
-        {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold text-foreground mb-2">Daily Raw Material Needs</h1>
           <p className="text-muted-foreground">Enter your requirements to find vendor clusters and better prices</p>
         </div>
-
-        {/* Add New Material */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -160,7 +158,6 @@ export default function VendorNeeds() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="quantity">Quantity</Label>
                 <Input
@@ -171,7 +168,6 @@ export default function VendorNeeds() {
                   placeholder="0"
                 />
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="unit">Unit</Label>
                 <Select 
@@ -189,7 +185,6 @@ export default function VendorNeeds() {
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="space-y-2">
                 <Label htmlFor="urgency">Urgency</Label>
                 <Select 
@@ -207,15 +202,12 @@ export default function VendorNeeds() {
                 </Select>
               </div>
             </div>
-
             <Button onClick={addMaterial} className="w-full md:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Add to List
             </Button>
           </CardContent>
         </Card>
-
-        {/* Current Materials List */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -224,7 +216,9 @@ export default function VendorNeeds() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {materials.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : materials.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-50" />
                 <p>No items added yet. Add your daily requirements above.</p>
@@ -253,7 +247,6 @@ export default function VendorNeeds() {
                     </Button>
                   </div>
                 ))}
-
                 <div className="pt-4 border-t">
                   <Button 
                     onClick={searchForClusters} 
@@ -277,62 +270,7 @@ export default function VendorNeeds() {
             )}
           </CardContent>
         </Card>
-
-        {/* Cluster Matches */}
-        {!isSearchingClusters && materials.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <Users className="w-5 h-5" />
-                <span>Available Clusters</span>
-              </CardTitle>
-              <CardDescription>
-                Join these vendor clusters to get better prices
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {clusterMatches.map((match, index) => (
-                  <div key={index} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-lg">{match.item}</h4>
-                      <Badge className="bg-success/10 text-success border-success">
-                        {match.estimatedSavings}% savings
-                      </Badge>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div className="flex items-center space-x-2">
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{match.vendors} vendors</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{match.deliveryTime}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm">{match.location}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Total quantity: {match.totalQuantity}kg
-                        </p>
-                        <Progress value={75} className="w-32 h-2 mt-1" />
-                        <p className="text-xs text-muted-foreground mt-1">75% filled</p>
-                      </div>
-                      <Button>Join Cluster</Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
+        {/* Cluster Matches (placeholder, not implemented) */}
         {/* Tips */}
         <Card className="bg-muted/30">
           <CardContent className="pt-6">
