@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ShoppingCart, Users, BarChart3, LogOut, User } from "lucide-react";
+import { ShoppingCart, Users, BarChart3, LogOut, User, Send, Package } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { auth } from "@/lib/firebase";
 import { useEffect, useState } from "react";
@@ -35,12 +35,14 @@ export function Navigation({ userRole, onLogout, userName }: NavigationProps) {
         return [
           { path: '/vendor/dashboard', label: 'Dashboard', icon: BarChart3 },
           { path: '/vendor/needs', label: 'Daily Needs', icon: ShoppingCart },
+          { path: '/vendor/offers', label: 'Received Offers', icon: Package },
           { path: '/vendor/orders', label: 'Orders', icon: Users },
         ];
       case 'supplier':
         return [
           { path: '/supplier/dashboard', label: 'Dashboard', icon: BarChart3 },
           { path: '/supplier/inventory', label: 'Inventory', icon: ShoppingCart },
+          { path: '/supplier/offers', label: 'Submit Offers', icon: Send },
           { path: '/supplier/orders', label: 'Orders', icon: Users },
         ];
       default:

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db, auth } from "@/lib/firebase";
-import { doc, onSnapshot } from "firebase/firestore";
+import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 
 interface VendorProfile {
@@ -44,6 +44,7 @@ interface RawMaterial {
 export default function VendorDashboard() {
   const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
   const [vendorNeeds, setVendorNeeds] = useState<RawMaterial[]>([]);
+  const [receivedOffers, setReceivedOffers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -83,6 +84,20 @@ export default function VendorDashboard() {
       } else {
         setVendorNeeds([]);
       }
+    });
+    return () => unsub();
+  }, [userId]);
+
+  // Fetch received offers
+  useEffect(() => {
+    if (!userId) return;
+    const q = query(collection(db, "supplier_offers"), where("vendorNeedId", "==", userId));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const offers: any[] = [];
+      snapshot.forEach((doc) => {
+        offers.push({ id: doc.id, ...doc.data() });
+      });
+      setReceivedOffers(offers);
     });
     return () => unsub();
   }, [userId]);
@@ -130,7 +145,7 @@ export default function VendorDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Today's Needs</CardTitle>
@@ -174,6 +189,17 @@ export default function VendorDashboard() {
               <p className="text-xs text-muted-foreground">Preferred method</p>
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Received Offers</CardTitle>
+              <Package className="h-4 w-4 text-accent" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-accent">{receivedOffers.length}</div>
+              <p className="text-xs text-muted-foreground">From suppliers</p>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Today's Needs */}
@@ -212,6 +238,66 @@ export default function VendorDashboard() {
                     <Button size="sm" variant="outline">View Details</Button>
                   </div>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent Offers */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Package className="w-5 h-5" />
+                <span>Recent Offers</span>
+              </div>
+              <Link to="/vendor/offers">
+                <Button variant="outline" size="sm">
+                  View All Offers
+                </Button>
+              </Link>
+            </div>
+            <CardDescription>
+              Latest offers from suppliers for your needs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {receivedOffers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No offers received yet. Suppliers will submit offers for your needs.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {receivedOffers.slice(0, 3).map((offer) => (
+                  <div key={offer.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h4 className="font-semibold">₹{offer.totalPrice}</h4>
+                        <Badge variant={offer.status === 'pending' ? 'secondary' : 
+                                       offer.status === 'accepted' ? 'default' : 'destructive'}>
+                          {offer.status === 'pending' ? 'Pending' : 
+                           offer.status === 'accepted' ? 'Accepted' : 'Rejected'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                        <span>{offer.deliveryMode}</span>
+                        <span>•</span>
+                        <span>{offer.deliveryTime}</span>
+                      </div>
+                    </div>
+                    <Link to="/vendor/offers">
+                      <Button size="sm" variant="outline">View Details</Button>
+                    </Link>
+                  </div>
+                ))}
+                {receivedOffers.length > 3 && (
+                  <div className="text-center pt-4">
+                    <Link to="/vendor/offers">
+                      <Button variant="ghost">View {receivedOffers.length - 3} more offers</Button>
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>

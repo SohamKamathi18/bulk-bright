@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Package, TrendingUp, Users, Clock, DollarSign, MapPin, Bell, Eye, CheckCircle } from "lucide-react";
+import { Package, TrendingUp, Users, Clock, DollarSign, MapPin, Bell, Eye, CheckCircle, Send } from "lucide-react";
 import { Link } from "react-router-dom";
 import { db, auth } from "@/lib/firebase";
 import { collection, onSnapshot, query, getDocs, doc, getDoc } from "firebase/firestore";
@@ -167,12 +167,20 @@ export default function SupplierDashboard() {
             </h1>
             <p className="text-muted-foreground">Manage your inventory and respond to vendor clusters</p>
           </div>
-          <Link to="/supplier/inventory">
-            <Button className="flex items-center space-x-2">
-              <Package className="w-4 h-4" />
-              <span>Manage Inventory</span>
-            </Button>
-          </Link>
+          <div className="flex items-center space-x-2">
+            <Link to="/supplier/inventory">
+              <Button variant="outline" className="flex items-center space-x-2">
+                <Package className="w-4 h-4" />
+                <span>Manage Inventory</span>
+              </Button>
+            </Link>
+            <Link to="/supplier/offers">
+              <Button className="flex items-center space-x-2">
+                <Send className="w-4 h-4" />
+                <span>Submit Offers</span>
+              </Button>
+            </Link>
+          </div>
         </div>
         {/* Notifications */}
         {notifications.length > 0 && (
