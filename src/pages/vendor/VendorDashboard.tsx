@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/ui/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,62 +12,80 @@ import {
   DollarSign, 
   Package,
   MapPin,
-  Bell
+  Bell,
+  User
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { db, auth } from "@/lib/firebase";
+import { doc, onSnapshot } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+
+interface VendorProfile {
+  fullName: string;
+  businessType: string;
+  businessName?: string;
+  phone: string;
+  email?: string;
+  pinCode: string;
+  preferredDelivery: string;
+  avgDailyNeeds: string[];
+  language: string;
+}
+
+interface RawMaterial {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  urgency: 'low' | 'medium' | 'high';
+  preferredTime?: string;
+}
 
 export default function VendorDashboard() {
-  const [notifications] = useState([
-    { id: 1, message: "New cluster formed for tomatoes - Save 25%!", type: "success" },
-    { id: 2, message: "Flash deal: Onions at ₹15/kg for next 2 hours", type: "warning" },
-  ]);
+  const [vendorProfile, setVendorProfile] = useState<VendorProfile | null>(null);
+  const [vendorNeeds, setVendorNeeds] = useState<RawMaterial[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const todaysDeals = [
-    {
-      item: "Tomatoes",
-      normalPrice: 35,
-      clusteredPrice: 26,
-      savings: 26,
-      vendors: 4,
-      timeLeft: "2h 30m",
-      supplier: "Fresh Farm Co."
-    },
-    {
-      item: "Onions",
-      normalPrice: 20,
-      clusteredPrice: 15,
-      savings: 25,
-      vendors: 6,
-      timeLeft: "45m",
-      supplier: "Valley Produce"
-    },
-    {
-      item: "Potatoes",
-      normalPrice: 18,
-      clusteredPrice: 14,
-      savings: 22,
-      vendors: 3,
-      timeLeft: "4h 15m",
-      supplier: "Green Harvest"
-    },
-  ];
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setUserId(user.uid);
+      } else {
+        setUserId(null);
+        setVendorProfile(null);
+        setVendorNeeds([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const recentOrders = [
-    {
-      id: "ORD001",
-      items: "Tomatoes 5kg, Onions 3kg",
-      total: 195,
-      status: "delivered",
-      date: "Today"
-    },
-    {
-      id: "ORD002", 
-      items: "Potatoes 8kg, Oil 2L",
-      total: 340,
-      status: "in_transit",
-      date: "Yesterday"
-    },
-  ];
+  // Fetch vendor profile
+  useEffect(() => {
+    if (!userId) return;
+    const profileRef = doc(db, "vendor_profiles", userId);
+    const unsub = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setVendorProfile(docSnap.data() as VendorProfile);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, [userId]);
+
+  // Fetch vendor needs
+  useEffect(() => {
+    if (!userId) return;
+    const needsRef = doc(db, "vendor_needs", userId);
+    const unsub = onSnapshot(needsRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setVendorNeeds(docSnap.data().materials || []);
+      } else {
+        setVendorNeeds([]);
+      }
+    });
+    return () => unsub();
+  }, [userId]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -78,15 +96,29 @@ export default function VendorDashboard() {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">Loading...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
-      <Navigation userRole="vendor" onLogout={() => window.location.href = '/'} />
+      <Navigation 
+        userRole="vendor" 
+        onLogout={() => window.location.href = '/'} 
+        userName={vendorProfile?.fullName}
+      />
       
       <main className="max-w-7xl mx-auto p-4 space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Good morning, Rajesh!</h1>
+            <h1 className="text-3xl font-bold text-foreground">
+              Good morning, {vendorProfile?.fullName || 'Vendor'}!
+            </h1>
             <p className="text-muted-foreground">Here's what's happening with your sourcing today</p>
           </div>
           <Link to="/vendor/needs">
@@ -97,144 +129,91 @@ export default function VendorDashboard() {
           </Link>
         </div>
 
-        {/* Notifications */}
-        {notifications.length > 0 && (
-          <div className="space-y-2">
-            {notifications.map((notif) => (
-              <div 
-                key={notif.id}
-                className={`p-3 rounded-lg border-l-4 flex items-center space-x-3 ${
-                  notif.type === 'success' 
-                    ? 'bg-success/10 border-l-success' 
-                    : 'bg-warning/10 border-l-warning'
-                }`}
-              >
-                <Bell className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm">{notif.message}</span>
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Today's Savings</CardTitle>
-              <TrendingUp className="h-4 w-4 text-success" />
+              <CardTitle className="text-sm font-medium">Today's Needs</CardTitle>
+              <ShoppingCart className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">₹247</div>
-              <p className="text-xs text-muted-foreground">+23% from yesterday</p>
+              <div className="text-2xl font-bold text-primary">{vendorNeeds.length}</div>
+              <p className="text-xs text-muted-foreground">Items added today</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Clusters</CardTitle>
-              <Users className="h-4 w-4 text-primary" />
+              <CardTitle className="text-sm font-medium">Business Type</CardTitle>
+              <Users className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground">2 with active deals</p>
+              <div className="text-2xl font-bold">{vendorProfile?.businessType || 'N/A'}</div>
+              <p className="text-xs text-muted-foreground">Your business</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Orders</CardTitle>
-              <Package className="h-4 w-4 text-warning" />
+              <CardTitle className="text-sm font-medium">Location</CardTitle>
+              <MapPin className="h-4 w-4 text-warning" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">2</div>
-              <p className="text-xs text-muted-foreground">1 arriving today</p>
+              <div className="text-2xl font-bold">{vendorProfile?.pinCode || 'N/A'}</div>
+              <p className="text-xs text-muted-foreground">PIN Code</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Week</CardTitle>
-              <DollarSign className="h-4 w-4 text-accent" />
+              <CardTitle className="text-sm font-medium">Delivery</CardTitle>
+              <Package className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">₹1,340</div>
-              <p className="text-xs text-muted-foreground">Total spent</p>
+              <div className="text-2xl font-bold">{vendorProfile?.preferredDelivery || 'N/A'}</div>
+              <p className="text-xs text-muted-foreground">Preferred method</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Today's Deals */}
+        {/* Today's Needs */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="w-5 h-5" />
-              <span>Today's Cluster Deals</span>
+              <ShoppingCart className="w-5 h-5" />
+              <span>Today's Needs</span>
             </CardTitle>
             <CardDescription>
-              Join vendor clusters to unlock these special prices
+              Your current requirements for today
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4">
-              {todaysDeals.map((deal, index) => (
-                <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <h4 className="font-semibold">{deal.item}</h4>
-                      <Badge variant="secondary">{deal.vendors} vendors</Badge>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {deal.timeLeft}
+            {vendorNeeds.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <ShoppingCart className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No items added yet. Add your daily requirements to get started.</p>
+                <Link to="/vendor/needs">
+                  <Button className="mt-4">Add Needs</Button>
+                </Link>
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {vendorNeeds.map((need) => (
+                  <div key={need.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h4 className="font-semibold">{need.name}</h4>
+                        <Badge variant="secondary">{need.urgency}</Badge>
+                      </div>
+                      <div className="flex items-center space-x-4 text-sm">
+                        <span className="font-semibold">{need.quantity} {need.unit}</span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-4 text-sm">
-                      <span className="text-muted-foreground line-through">₹{deal.normalPrice}/kg</span>
-                      <span className="font-semibold text-success">₹{deal.clusteredPrice}/kg</span>
-                      <Badge className="bg-success/10 text-success border-success">
-                        {deal.savings}% OFF
-                      </Badge>
-                    </div>
-                    <div className="flex items-center text-xs text-muted-foreground mt-1">
-                      <MapPin className="w-3 h-3 mr-1" />
-                      {deal.supplier}
-                    </div>
+                    <Button size="sm" variant="outline">View Details</Button>
                   </div>
-                  <Button size="sm">Join Cluster</Button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Recent Orders */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Package className="w-5 h-5" />
-              <span>Recent Orders</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-1">
-                      <span className="font-medium">#{order.id}</span>
-                      <Badge className={getStatusColor(order.status)}>
-                        {order.status.replace('_', ' ')}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{order.items}</p>
-                    <p className="text-xs text-muted-foreground">{order.date}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">₹{order.total}</p>
-                    <Button variant="ghost" size="sm">View Details</Button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </main>

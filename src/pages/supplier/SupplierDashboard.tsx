@@ -1,89 +1,133 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navigation } from "@/components/ui/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { 
-  Package, 
-  TrendingUp, 
-  Users, 
-  Clock, 
-  DollarSign, 
-  MapPin,
-  Bell,
-  Eye,
-  CheckCircle
-} from "lucide-react";
+import { Package, TrendingUp, Users, Clock, DollarSign, MapPin, Bell, Eye, CheckCircle } from "lucide-react";
 import { Link } from "react-router-dom";
+import { db, auth } from "@/lib/firebase";
+import { collection, onSnapshot, query, getDocs, doc, getDoc } from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+
+interface RawMaterial {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+  urgency: 'low' | 'medium' | 'high';
+  preferredTime?: string;
+}
+
+interface VendorNeedsDoc {
+  materials: RawMaterial[];
+  vendorId: string;
+}
+
+interface SupplierNotification {
+  id: string;
+  message: string;
+  type: string;
+}
+
+interface SupplierOrder {
+  id: string;
+  cluster: string;
+  item: string;
+  quantity: number;
+  totalValue: number;
+  vendors: number;
+  status: string;
+  deliveryTime: string;
+}
 
 export default function SupplierDashboard() {
-  const [notifications] = useState([
-    { id: 1, message: "New cluster demand: 25kg tomatoes in Sector 14", type: "info" },
-    { id: 2, message: "Urgent: 15kg onions needed within 2 hours", type: "urgent" },
-  ]);
+  const [vendorNeeds, setVendorNeeds] = useState<VendorNeedsDoc[]>([]);
+  const [notifications, setNotifications] = useState<SupplierNotification[]>([]);
+  const [recentOrders, setRecentOrders] = useState<SupplierOrder[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [supplierId, setSupplierId] = useState<string | null>(null);
+  const [supplierProfile, setSupplierProfile] = useState<any>(null);
 
-  const activeClusters = [
-    {
-      id: 'CL001',
-      item: 'Tomatoes',
-      totalQuantity: 25,
-      vendors: 5,
-      currentOffers: 3,
-      bestPrice: 28,
-      yourPrice: 26,
-      timeLeft: '1h 45m',
-      location: 'Sector 14, 2km radius',
-      urgency: 'medium'
-    },
-    {
-      id: 'CL002',
-      item: 'Onions', 
-      totalQuantity: 18,
-      vendors: 4,
-      currentOffers: 2,
-      bestPrice: 17,
-      yourPrice: 15,
-      timeLeft: '45m',
-      location: 'Market Area, 1.5km radius',
-      urgency: 'high'
-    },
-    {
-      id: 'CL003',
-      item: 'Potatoes',
-      totalQuantity: 35,
-      vendors: 7,
-      currentOffers: 4,
-      bestPrice: 16,
-      yourPrice: null,
-      timeLeft: '3h 20m', 
-      location: 'Industrial Zone, 3km radius',
-      urgency: 'low'
-    }
-  ];
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setSupplierId(user.uid);
+        // Fetch supplier profile
+        const profileRef = doc(db, "supplier_profiles", user.uid);
+        getDoc(profileRef).then((profileSnap) => {
+          if (profileSnap.exists()) {
+            setSupplierProfile(profileSnap.data());
+          }
+        });
+      } else {
+        setSupplierId(null);
+        setSupplierProfile(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
-  const recentOrders = [
-    {
-      id: 'ORD101',
-      cluster: 'CL001',
-      item: 'Tomatoes',
-      quantity: 25,
-      totalValue: 650,
-      vendors: 5,
-      status: 'dispatched',
-      deliveryTime: '2 hours'
-    },
-    {
-      id: 'ORD102',
-      cluster: 'CL004', 
-      item: 'Onions',
-      quantity: 20,
-      totalValue: 300,
-      vendors: 4,
-      status: 'delivered',
-      deliveryTime: 'Completed'
-    }
-  ];
+  // Fetch all vendor needs (live clusters)
+  useEffect(() => {
+    setLoading(true);
+    const q = collection(db, "vendor_needs");
+    const unsub = onSnapshot(q, (snapshot) => {
+      const needs: VendorNeedsDoc[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.materials && Array.isArray(data.materials)) {
+          needs.push({ materials: data.materials, vendorId: docSnap.id });
+        }
+      });
+      setVendorNeeds(needs);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // Fetch supplier notifications
+  useEffect(() => {
+    if (!supplierId) return;
+    const q = collection(db, "supplier_notifications");
+    const unsub = onSnapshot(q, (snapshot) => {
+      const notifs: SupplierNotification[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.supplierId === supplierId) {
+          notifs.push({ id: docSnap.id, message: data.message, type: data.type });
+        }
+      });
+      setNotifications(notifs);
+    });
+    return () => unsub();
+  }, [supplierId]);
+
+  // Fetch supplier recent orders
+  useEffect(() => {
+    if (!supplierId) return;
+    const q = collection(db, "supplier_orders");
+    const unsub = onSnapshot(q, (snapshot) => {
+      const orders: SupplierOrder[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.supplierId === supplierId) {
+          orders.push({
+            id: docSnap.id,
+            cluster: data.cluster,
+            item: data.item,
+            quantity: data.quantity,
+            totalValue: data.totalValue,
+            vendors: data.vendors,
+            status: data.status,
+            deliveryTime: data.deliveryTime,
+          });
+        }
+      });
+      setRecentOrders(orders);
+    });
+    return () => unsub();
+  }, [supplierId]);
 
   const getUrgencyColor = (urgency: string) => {
     switch (urgency) {
@@ -103,15 +147,24 @@ export default function SupplierDashboard() {
     }
   };
 
+  // Stats (example: count clusters, orders, etc.)
+  const totalClusters = vendorNeeds.reduce((acc, doc) => acc + doc.materials.length, 0);
+  const totalOrders = recentOrders.length;
+  const totalRevenue = recentOrders.reduce((acc, order) => acc + (order.totalValue || 0), 0);
+
   return (
     <div className="min-h-screen bg-background">
-      <Navigation userRole="supplier" onLogout={() => window.location.href = '/'} />
-      
+      <Navigation 
+        userRole="supplier" 
+        onLogout={() => window.location.href = '/'} 
+        userName={supplierProfile?.contactPersonName}
+      />
       <main className="max-w-7xl mx-auto p-4 space-y-6">
-        {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Good morning, Fresh Farm Co.!</h1>
+            <h1 className="text-3xl font-bold text-foreground">
+              Good morning, {supplierProfile?.contactPersonName || 'Supplier'}!
+            </h1>
             <p className="text-muted-foreground">Manage your inventory and respond to vendor clusters</p>
           </div>
           <Link to="/supplier/inventory">
@@ -121,7 +174,6 @@ export default function SupplierDashboard() {
             </Button>
           </Link>
         </div>
-
         {/* Notifications */}
         {notifications.length > 0 && (
           <div className="space-y-2">
@@ -141,7 +193,6 @@ export default function SupplierDashboard() {
             ))}
           </div>
         )}
-
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card>
@@ -150,46 +201,42 @@ export default function SupplierDashboard() {
               <TrendingUp className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-success">₹8,450</div>
-              <p className="text-xs text-muted-foreground">+18% from yesterday</p>
+              <div className="text-2xl font-bold text-success">₹{totalRevenue}</div>
+              <p className="text-xs text-muted-foreground">Total revenue from orders</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Active Clusters</CardTitle>
               <Users className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">3</div>
-              <p className="text-xs text-muted-foreground">2 with your offers</p>
+              <div className="text-2xl font-bold">{totalClusters}</div>
+              <p className="text-xs text-muted-foreground">Vendor needs to fulfill</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Pending Orders</CardTitle>
               <Package className="h-4 w-4 text-warning" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">1</div>
+              <div className="text-2xl font-bold">{recentOrders.filter(o => o.status === 'pending' || o.status === 'dispatched').length}</div>
               <p className="text-xs text-muted-foreground">To be dispatched</p>
             </CardContent>
           </Card>
-
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Win Rate</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
               <DollarSign className="h-4 w-4 text-accent" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">78%</div>
-              <p className="text-xs text-muted-foreground">Last 7 days</p>
+              <div className="text-2xl font-bold">{totalOrders}</div>
+              <p className="text-xs text-muted-foreground">All time</p>
             </CardContent>
           </Card>
         </div>
-
-        {/* Active Clusters */}
+        {/* Active Clusters (Vendor Needs) */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -201,71 +248,47 @@ export default function SupplierDashboard() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {activeClusters.map((cluster) => (
-                <div key={cluster.id} className="border rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-3">
-                      <h4 className="font-semibold text-lg">{cluster.item}</h4>
-                      <Badge className={getUrgencyColor(cluster.urgency)}>
-                        {cluster.urgency}
-                      </Badge>
-                      <div className="flex items-center text-sm text-muted-foreground">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {cluster.timeLeft}
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading...</div>
+            ) : vendorNeeds.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No vendor needs found.</div>
+            ) : (
+              <div className="space-y-4">
+                {vendorNeeds.map((doc) => (
+                  doc.materials.map((material) => (
+                    <div key={material.id + doc.vendorId} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <h4 className="font-semibold text-lg">{material.name}</h4>
+                          <Badge className={getUrgencyColor(material.urgency)}>
+                            {material.urgency}
+                          </Badge>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold">{material.quantity} {material.unit} needed</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <span className="text-sm text-muted-foreground">Vendor: {doc.vendorId}</span>
+                        </div>
+                        <div className="flex space-x-2">
+                          <Button variant="outline" size="sm">
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Details
+                          </Button>
+                          <Button size="sm">
+                            Submit Offer
+                          </Button>
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{cluster.totalQuantity}kg needed</p>
-                      <p className="text-sm text-muted-foreground">{cluster.vendors} vendors</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center space-x-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{cluster.location}</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <TrendingUp className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">{cluster.currentOffers} offers submitted</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <DollarSign className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm">Best: ₹{cluster.bestPrice}/kg</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      {cluster.yourPrice ? (
-                        <div className="flex items-center space-x-2">
-                          <CheckCircle className="w-4 h-4 text-success" />
-                          <span className="text-sm font-medium">Your offer: ₹{cluster.yourPrice}/kg</span>
-                          {cluster.yourPrice <= cluster.bestPrice && (
-                            <Badge className="bg-success/10 text-success border-success">Winning</Badge>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">No offer submitted</span>
-                      )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <Button variant="outline" size="sm">
-                        <Eye className="w-4 h-4 mr-2" />
-                        View Details
-                      </Button>
-                      <Button size="sm">
-                        {cluster.yourPrice ? 'Update Offer' : 'Submit Offer'}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
+                  ))
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
-
         {/* Recent Orders */}
         <Card>
           <CardHeader>
@@ -276,7 +299,9 @@ export default function SupplierDashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentOrders.map((order) => (
+              {recentOrders.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">No orders found.</div>
+              ) : recentOrders.map((order) => (
                 <div key={order.id} className="flex items-center justify-between p-4 border rounded-lg">
                   <div className="flex-1">
                     <div className="flex items-center space-x-3 mb-1">
@@ -286,7 +311,7 @@ export default function SupplierDashboard() {
                       </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
-                      {order.item} - {order.quantity}kg for {order.vendors} vendors
+                      {order.item} - {order.quantity} for {order.vendors} vendors
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Delivery: {order.deliveryTime}

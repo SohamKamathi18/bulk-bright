@@ -7,8 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ShoppingCart, Users, Mail, Lock, ArrowLeft } from "lucide-react";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { toast } from "@/hooks/use-toast";
-import { auth } from "@/lib/firebase";
+import { auth, db } from "@/lib/firebase";
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
 
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
@@ -32,24 +33,40 @@ export default function AuthPage() {
     }
     setIsLoading(true);
     try {
+      let userCredential;
       if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
+        userCredential = await createUserWithEmailAndPassword(auth, email, password);
         toast({
           title: "Account Created!",
           description: "You have successfully registered.",
         });
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        userCredential = await signInWithEmailAndPassword(auth, email, password);
         toast({
           title: "Welcome to VendorLink!",
           description: `Logged in successfully as ${selectedRole}`,
         });
       }
-      if (selectedRole === 'vendor') {
-        navigate('/vendor/dashboard');
-      } else {
-        navigate('/supplier/dashboard');
-      }
+      const user = userCredential.user;
+                        if (selectedRole === 'vendor') {
+                    // Check if vendor profile exists
+                    const profileRef = doc(db, "vendor_profiles", user.uid);
+                    const profileSnap = await getDoc(profileRef);
+                    if (profileSnap.exists()) {
+                      navigate('/vendor/dashboard');
+                    } else {
+                      navigate('/vendor/details');
+                    }
+                  } else {
+                    // Check if supplier profile exists
+                    const profileRef = doc(db, "supplier_profiles", user.uid);
+                    const profileSnap = await getDoc(profileRef);
+                    if (profileSnap.exists()) {
+                      navigate('/supplier/dashboard');
+                    } else {
+                      navigate('/supplier/details');
+                    }
+                  }
     } catch (error: any) {
       toast({
         title: "Error",

@@ -9,6 +9,8 @@ import VendorDashboard from "./pages/vendor/VendorDashboard";
 import VendorNeeds from "./pages/vendor/VendorNeeds";
 import SupplierDashboard from "./pages/supplier/SupplierDashboard";
 import NotFound from "./pages/NotFound";
+import VendorDetailsForm from "./pages/vendor/VendorDetailsForm";
+import SupplierDetailsForm from "./pages/supplier/SupplierDetailsForm";
 
 const queryClient = new QueryClient();
 
@@ -23,7 +25,9 @@ const App = () => (
           <Route path="/auth" element={<AuthPage />} />
           <Route path="/vendor/dashboard" element={<VendorDashboard />} />
           <Route path="/vendor/needs" element={<VendorNeeds />} />
+          <Route path="/vendor/details" element={<VendorDetailsForm />} />
           <Route path="/supplier/dashboard" element={<SupplierDashboard />} />
+          <Route path="/supplier/details" element={<SupplierDetailsForm />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

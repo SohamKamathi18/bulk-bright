@@ -1,14 +1,31 @@
 import { Button } from "@/components/ui/button";
-import { ShoppingCart, Users, BarChart3, LogOut } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { ShoppingCart, Users, BarChart3, LogOut, User } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { auth } from "@/lib/firebase";
+import { useEffect, useState } from "react";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface NavigationProps {
   userRole?: 'vendor' | 'supplier' | 'admin';
   onLogout?: () => void;
+  userName?: string;
 }
 
-export function Navigation({ userRole, onLogout }: NavigationProps) {
+export function Navigation({ userRole, onLogout, userName }: NavigationProps) {
   const location = useLocation();
+  const [userPhotoURL, setUserPhotoURL] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user && user.photoURL) {
+        setUserPhotoURL(user.photoURL);
+      } else {
+        setUserPhotoURL(null);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
 
   const getNavItems = () => {
     switch (userRole) {
@@ -61,12 +78,25 @@ export function Navigation({ userRole, onLogout }: NavigationProps) {
           </div>
         )}
 
-        {onLogout && (
-          <Button variant="outline" onClick={onLogout} className="flex items-center space-x-2">
-            <LogOut className="w-4 h-4" />
-            <span className="hidden sm:inline">Logout</span>
-          </Button>
-        )}
+        <div className="flex items-center space-x-2">
+          {userName && (
+            <Button variant="ghost" className="flex items-center space-x-2">
+              <Avatar className="w-6 h-6">
+                <AvatarImage src={userPhotoURL || undefined} alt={userName} />
+                <AvatarFallback>
+                  <User className="w-3 h-3" />
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:inline">{userName}</span>
+            </Button>
+          )}
+          {onLogout && (
+            <Button variant="outline" onClick={onLogout} className="flex items-center space-x-2">
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">Logout</span>
+            </Button>
+          )}
+        </div>
       </div>
     </nav>
   );
