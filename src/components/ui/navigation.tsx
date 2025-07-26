@@ -5,6 +5,7 @@ import { Link, useLocation } from "react-router-dom";
 import { auth } from "@/lib/firebase";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
+import ProfilePopup from "@/components/ProfilePopup";
 
 interface NavigationProps {
   userRole?: 'vendor' | 'supplier' | 'admin';
@@ -15,6 +16,7 @@ interface NavigationProps {
 export function Navigation({ userRole, onLogout, userName }: NavigationProps) {
   const location = useLocation();
   const [userPhotoURL, setUserPhotoURL] = useState<string | null>(null);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -80,7 +82,11 @@ export function Navigation({ userRole, onLogout, userName }: NavigationProps) {
 
         <div className="flex items-center space-x-2">
           {userName && (
-            <Button variant="ghost" className="flex items-center space-x-2">
+            <Button 
+              variant="ghost" 
+              className="flex items-center space-x-2"
+              onClick={() => setIsProfileOpen(true)}
+            >
               <Avatar className="w-6 h-6">
                 <AvatarImage src={userPhotoURL || undefined} alt={userName} />
                 <AvatarFallback>
@@ -98,6 +104,14 @@ export function Navigation({ userRole, onLogout, userName }: NavigationProps) {
           )}
         </div>
       </div>
+      
+      {userRole && (
+        <ProfilePopup
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+          userRole={userRole}
+        />
+      )}
     </nav>
   );
 }
